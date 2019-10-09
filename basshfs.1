@@ -1,0 +1,308 @@
+.TH "basshfs" "1" "06 Sep 2019" "" ""
+./"################################################################
+.SH "NAME"
+./"################################################################
+\fBbasshfs\fP \(em Bash-Accessible SSH File System
+./"################################################################
+.SH "SYNOPSIS"
+./"################################################################
+.nf
+Mount:   \fBeval `basshfs [USER@]HOST:[DIR] MOUNTPOINT [OPTIONS]`\fP
+Unmount: \fBeval `basshfs -u MOUNTPOINT`\fP
+List:    \fBbasshfs -l\fP
+.fi
+.PP
+Mount and unmount remote file systems as if they were local.
+./"################################################################
+.SH "DESCRIPTION"
+./"################################################################
+Working with remote systems over SSH is common in HPC environments
+where the size of data sets makes them nontrivial to relocate.  To run
+arbitrary commands on that data, a full SSH session is required.  There
+are cases, however, when the user may wish to perform simpler operations
+such as checking file existence and size, viewing differences between
+configuration files, creating directories, etc. that can be achieved
+with more limited access.  Juggling multiple sessions to multiple hosts
+may be inconvenient for such simple tasks.  BASSHFS is a tool that
+allows users to perform such tasks within a single terminal on a single
+host by transparently carrying out remote operations as needed to
+present remote files as if they are locally mounted when using the bash
+shell.
+.PP
+BASSHFS is similar to the existing SSHFS utility except it is does not
+require FUSE kernel support.  Instead, BASSHFS uses the aliasing and
+function mechanisms of the bash shell to intercept program invocations
+and remap those that are supported to its own versions.  These internal
+versions determine if files on the command line are local or remote.
+Remote files are processed transparently using a persistent SSH
+connection to the associated host(s).  Output associated with the local
+and remote files is then multiplexed together into the standard unified
+format associated with the original command.  To the user, it appears as
+if all files reside on a local file system even though they may span
+multiple files systems on multiple hosts.
+./"################################################################
+.SH "REQUIREMENTS"
+./"################################################################
+BASSHFS functionality is only supported within the Bash shell and
+requires SSH and Perl version 5.8.5 or above.  It also requires the
+standard Unix utilities cat, column, false, sort, and true and has been
+tested successfully on Linux, OS X, and Windows under Cygwin.  Note that
+users of Windows under Cygwin may need to install the coreutils and
+util-linux packages to obtain these utilities.
+./"################################################################
+.SH "USAGE"
+./"################################################################
+.IP "Mount file system"
+Before a remote file system can be accessed, it must be "mounted"
+locally.  Note that this is not a true file system mount as with SSHFS,
+but a virtual mount that is only known to certain commands within the
+Bash shell currently running.  The mount point must not correspond to
+any existing file or directory.  In order for the corresponding aliases
+and functions to be imported into the existing Bash environment, the
+command must be executed in an eval statement.
+.PP
+.RS
+.RS
+.nf
+\fBeval `basshfs [USER@]HOST:[DIR] MOUNTPOINT [OPTIONS]`\fP
+.fi
+.RE
+.RE
+.IP
+For example, to mount /home on host1 as /mnt/home1:
+.PP
+.RS
+.RS
+.nf
+\fBeval `basshfs host1:/home1 /mnt/home1`\fP
+.fi
+.RE
+.RE
+.IP
+By default, BASSHFS will access remote hosts using the bare "ssh"
+command.  If additional options are needed, the -s option may be used.
+For example, if host1 can only be accessed by first hopping through
+bastion1, the corresponding mount command would be:
+.PP
+.RS
+.RS
+.nf
+\fBeval `basshfs -s "ssh bastion1 ssh" host1:/home1 /mnt/home1`\fP
+.fi
+.RE
+.RE
+.IP
+For use within a non-interactive bash shell, the script must set the
+expand_aliases option.  For example:
+.PP
+.RS
+.RS
+.nf
+#!/bin/bash
+shopt -s expand_aliases
+eval `basshfs host1:/home1 /mnt/home1`
+.fi
+.RE
+.RE
+.IP
+The use of BASSHFS overrides previously defined aliases for supported
+commands.  For example, if "ls" was previously aliases to "ls
+--color=always", once a file system is mounted, ls would no longer show
+colorized output.  If desired, default options for any supported command
+can be specified using the -oCMD=OPTS option.  For example, to set the
+above option for ls, the following can be used:
+.PP
+.RS
+.RS
+.nf
+\fBeval `basshfs -ols="--color=always" host1:/home1 /mnt/home1`\fP
+.fi
+.RE
+.RE
+.IP
+Note that built-in commands support only a limited subset of the
+available options found in their standard counterparts so options added
+in this manner may only apply to local files and not to those that
+reside on remote file systems.
+.IP "Unmount file system"
+To "unmount" a mounted file system and terminate any underlying
+processes, the -u option is used.  Similar to mount, in order for the
+corresponding aliases and functions to be removed from the existing
+Bash environment, the command must be executed in an eval statement.
+.PP
+.RS
+.RS
+.nf
+\fBeval `basshfs -u MOUNTPOINT`\fP
+.fi
+.RE
+.RE
+.IP
+For example, to unmount the previously mounted /mnt/home1:
+.PP
+.RS
+.RS
+.nf
+\fBeval `basshfs -u /mnt/home1`\fP
+.fi
+.RE
+.RE
+.IP "List mounted file systems"
+To see the list of mounted file systems, the -l option is used.  Note
+that it is not necessary to use an eval statement in this case.
+.PP
+.RS
+.RS
+.nf
+\fBbasshfs -l\fP
+.fi
+.RE
+.RE
+./"################################################################
+.SH "COMMANDS"
+./"################################################################
+Once a remote file system is mounted, a specific set of commands may
+be run on locations within the mounted hierarchy as if the file system
+were local.  Tab completion is also supported normally.  Currently
+supported commands and their currently supported options are below.
+Unsupported options will simply be ignored except where noted.
+.IP "\fBcat\fP (no options)"
+.IP "\fBcd\fP (no options)"
+Note that when changing to remote directories, cd only changes
+$PWD so to make changes visible, the working directory (i.e. \w in
+bash) must be in your prompt.  For example, the following prompt:
+.PP
+.RS
+.RS
+.nf
+export PS1="\\h:\\w> "
+.fi
+.RE
+.RE
+.IP
+would display the current host name followed by the current
+working directory.
+.IP "\fBchgrp\fP (no options)"
+Groups may be specified either by number or by name.  Names will be
+resolved on the remote host.
+.IP "\fBchmod\fP (no options)"
+Modes must be specified numerically (e.g. 0700).  Symbolic modes, such
+as a+rX, are not currently supported.
+.IP "\fBchown\fP (no options)"
+Users and groups may be specified either by number or by name.  Names
+will be resolved on the remote host.
+.IP "\fBcmp\fP (all options)"
+.IP "\fBcp\fP [-r]"
+Note that copies between two remote hosts transfer files to the local
+host first since BASSHFS does not allow third party transfers.  Thus,
+very large file transfers between remote systems should be achieved
+using an alternate approach.
+.IP "\fBdf\fP [-i]"
+Note that 1024-byte blocks are used.
+.IP "\fBdiff\fP (all options)"
+.IP "\fBdu\fP [-a] [-b] [-s]"
+Note that 1024-byte blocks are used.
+.IP "\fBfile\fP (all options)"
+.IP "\fBgrep\fP (all options)"
+.IP "\fBhead\fP [-number]"
+Note that head does not support the form "-n number", thus, for
+example, to display the first 5 lines of a file, use "-5" and not "-n
+5".
+.IP "\fBless\fP (all options)"
+.IP "\fBln\fP [-s]"
+Note that hard links are not supported.
+.IP "\fBls\fP [-1] [-d] [-l]"
+For efficiency purposes, ls behaves slightly differently for remote
+commands than for local.  In particular "ls -l" will not show links by
+default and will show what is actually linked instead of the link
+itself.  Link details can be obtained using the "-d" option (e.g. ls -ld
+*).
+.IP
+Also for efficiency, ls processes remote files before local files, so
+output ordering may be changed when remote and local files are
+interleaved on the ls command line.  For example, "ls /foo /mnt/host1
+/bar" would show /mnt/host1 first, then /foo, then /bar.
+.IP "\fBmkdir\fP (no options)"
+.IP "\fBmore\fP (all options)"
+.IP "\fBmount\fP (all options)"
+.IP "\fBmv\fP (no options)"
+.IP "\fBpwd\fP (no options)"
+.IP "\fBrm\fP [-r]"
+.IP "\fBrmdir\fP (no options)"
+.IP "\fBtail\fP [-number]"
+Note that tail does not support the form "-n number", thus, for
+example, to display the last 5 lines of a file, use "-5" and not "-n 5".
+.IP "\fBtee\fP [-a]"
+.IP "\fBtest\fP [-b] [-c] [-d] [-e] [-f] [-g] [-h] [-k] [-L] [-p] [-r] [-s] [-S] [-u] [-w]"
+Note that compound and string tests are not supported.  Compound and
+string tests can be achieved using multiple test commands separated by
+shell compound operators.  For example,
+.PP
+.RS
+.RS
+.nf
+test -f /mnt/host1/foo -a "abc" != "123"
+.fi
+.RE
+.RE
+.IP
+would become:
+.PP
+.RS
+.RS
+.nf
+test -f /mnt/host1/foo && test "abc" != "123"
+.fi
+.RE
+.RE
+.IP "\fBtouch\fP (no options)
+.IP "\fBwc\fP (all options)
+./"################################################################
+.SH "CAVEATS"
+./"################################################################
+In general, BASSHFS works for the most common usage scenarios with
+some caveats.  In particular:
+.IP -
+"Whole file" commands (i.e. commands that must process the entire
+file), including cat, cmp, diff, grep, wc (and currently more/less due
+to implementation) retrieve files first before processing for
+efficiency.  Thus, these commands should not be executed on very large
+files.
+.IP -
+There is a conflict between commands that take piped input and the
+custom globbing utilized by BASSHFS, thus these commands have portions
+of globbing support disabled.  These commands are grep, head, less,
+more, tail, tee, and wc.  In these cases, globbing will work for
+absolute prefixes, but not relative.  For example, "grep foo
+/mnt/host1/tmp/*" will work, but "cd /mnt/host1/tmp; grep foo *" will
+not.
+.IP -
+Redirection to/from remote files doesn't work.  The same effect can be
+achieved using cat and tee (e.g. "grep localhost </mnt/host1/etc/hosts
+>a" would become "cat /mnt/host1/etc/hosts |grep localhost | tee -a
+>/dev/null").  Redirection still works normally for local files.
+.IP -
+The first time a command is run involving a particular host, a SFTP
+connection is created to that host.  When running "ps", it may appear as
+if a zombie client process is running.
+.IP -
+Commands may hang the first time after switching networks (e.g.  with
+a laptop).  If this happens, hit Control-c and it will work the next
+time.
+.IP -
+The ls command does not show BASSHFS mount points.
+.IP -
+The wc command shows the names of the local copies of the file
+arguments instead of the original names.
+.IP -
+Various commands and completion may expand relative paths to absolute
+paths.
+./"################################################################
+.SH "AUTHOR"
+./"################################################################
+BASSHFS was written by Paul Kolano.
+./"################################################################
+.SH "SEE ALSO"
+./"################################################################
+bash(1), sshfs(1)
+
