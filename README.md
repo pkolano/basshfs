@@ -28,7 +28,8 @@ multiple files systems on multiple hosts.
 
 To install, copy "basshfs" to a directory in $PATH and "basshfs.1" to
 a directory in $MANPATH.  For usage details, see "basshfs.1" (in man
-page format, viewable with "nroff -man").
+page format, viewable with "nroff -man").  For license details, see
+"COPYING".
 
 Questions, comments, fixes, and/or enhancements welcome.
 
